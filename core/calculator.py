@@ -51,10 +51,19 @@ def build_flat(transactions, sku_to_game, period_start, period_end):
         bills_val = sum(t[3] for t in txs_in_period if t[1] == 'Bill')
         invoices_qty = sum(-t[2] for t in txs_in_period if t[1] == 'Invoice')
         invoices_val = sum(-t[3] for t in txs_in_period if t[1] == 'Invoice')
-        adj_in_qty = sum(t[2] for t in txs_in_period if t[1] == 'Inventory Qty Adjust' and t[2] > 0)
-        adj_in_val = sum(t[3] for t in txs_in_period if t[1] == 'Inventory Qty Adjust' and t[3] > 0)
-        adj_out_qty = sum(-t[2] for t in txs_in_period if t[1] == 'Inventory Qty Adjust' and t[2] < 0)
-        adj_out_val = sum(-t[3] for t in txs_in_period if t[1] == 'Inventory Qty Adjust' and t[3] < 0)
+        # Прочие движения (перемещения/корректировки) = всё, что НЕ Bill и НЕ Invoice:
+        # Inventory Adjust, Inventory Qty Adjust, Vendor Credit и любые будущие типы.
+        # Раньше привязывались к точной строке 'Inventory Qty Adjust' — но QuickBooks
+        # в разных выгрузках называет тип по-разному ('Inventory Adjust' без «Qty»),
+        # из-за чего корректировки терялись в «Перемещениях», оставаясь в конечном
+        # остатке, и начальный остаток уходил в минус. Классификация «всё прочее»
+        # делает тождество закуп − продано + перемещения = конец всегда верным и
+        # устойчивым к переименованию типов.
+        _is_move = lambda t: t[1] not in ('Bill', 'Invoice')
+        adj_in_qty = sum(t[2] for t in txs_in_period if _is_move(t) and t[2] > 0)
+        adj_in_val = sum(t[3] for t in txs_in_period if _is_move(t) and t[3] > 0)
+        adj_out_qty = sum(-t[2] for t in txs_in_period if _is_move(t) and t[2] < 0)
+        adj_out_val = sum(-t[3] for t in txs_in_period if _is_move(t) and t[3] < 0)
 
         start_qty = end_qty - bills_qty + invoices_qty - adj_in_qty + adj_out_qty
         start_val = end_val - bills_val + invoices_val - adj_in_val + adj_out_val
