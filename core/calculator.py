@@ -1,6 +1,7 @@
 """Расчёт плоской таблицы остатков за указанный календарный период."""
 from datetime import datetime
 from calendar import monthrange
+from collections import defaultdict
 
 
 def month_period(year, month):
@@ -30,11 +31,53 @@ def build_flat(transactions, sku_to_game, period_start, period_end):
     # он исключается из анализа рисков (см. report_writer).
     stores_with_bills = set()
     for (sku, store), txs in transactions.items():
-        for dt, ttype, qty, cost, on_hand, asset in txs:
+        for t in txs:
+            dt, ttype = t[0], t[1]
             if dt <= period_end and ttype == 'Bill':
                 stores_with_bills.add(store)
                 if sku not in last_bill_by_sku or dt > last_bill_by_sku[sku]:
                     last_bill_by_sku[sku] = dt
+
+    # --- Классификация прочих движений на ПЕРЕВОДЫ и КОРРЕКТИРОВКИ по парам Num ---
+    # Перевод между магазинами оформляется в QuickBooks двумя встречными документами
+    # (напр. Num 3304: −N из магазина А, Num 3305: +N в магазин Б). Документ опознаётся
+    # как перевод, если у него есть парный документ с ТОЧНО противоположным профилем
+    # (по каждому артикулу qty с обратным знаком). Остальные документы (одиночные
+    # списания/оприходования, Vendor Credit и т.п.) — корректировки, меняющие общий
+    # остаток. Так переводы всегда взаимозачитываются в ноль, а корректировки — нет.
+    def _num(t):
+        return t[6] if len(t) > 6 else ''
+    _period_docs = defaultdict(lambda: defaultdict(float))  # num -> {sku: qty}
+    for (sku, store), txs in transactions.items():
+        for t in txs:
+            if period_start <= t[0] <= period_end and t[1] not in ('Bill', 'Invoice') and _num(t):
+                _period_docs[_num(t)][sku] += t[2]
+
+    def _profile(num):
+        return tuple(sorted((s, round(q, 3)) for s, q in _period_docs[num].items() if abs(q) > 1e-6))
+
+    _by_prof = defaultdict(list)
+    for num in _period_docs:
+        p = _profile(num)
+        if p:
+            _by_prof[p].append(num)
+
+    transfer_nums = set()
+    _used = set()
+    for num in _period_docs:
+        if num in _used:
+            continue
+        p = _profile(num)
+        if not p:
+            continue
+        want = tuple(sorted((s, -q) for s, q in p))
+        cands = [m for m in _by_prof.get(want, []) if m not in _used and m != num]
+        if cands:
+            m = cands[0]
+            _used.add(num)
+            _used.add(m)
+            transfer_nums.add(num)
+            transfer_nums.add(m)
 
     flat = []
     for (sku, store), txs in transactions.items():
@@ -60,13 +103,19 @@ def build_flat(transactions, sku_to_game, period_start, period_end):
         # делает тождество закуп − продано + перемещения = конец всегда верным и
         # устойчивым к переименованию типов.
         _is_move = lambda t: t[1] not in ('Bill', 'Invoice')
-        adj_in_qty = sum(t[2] for t in txs_in_period if _is_move(t) and t[2] > 0)
-        adj_in_val = sum(t[3] for t in txs_in_period if _is_move(t) and t[3] > 0)
-        adj_out_qty = sum(-t[2] for t in txs_in_period if _is_move(t) and t[2] < 0)
-        adj_out_val = sum(-t[3] for t in txs_in_period if _is_move(t) and t[3] < 0)
+        # Переводы — движения, чей документ Num опознан как парный (см. transfer_nums).
+        _is_transfer = lambda t: _is_move(t) and _num(t) in transfer_nums
+        # Корректировки — все прочие движения (одиночные списания/оприходования,
+        # Vendor Credit, движения без Num и т.п.).
+        _is_corr = lambda t: _is_move(t) and _num(t) not in transfer_nums
 
-        start_qty = end_qty - bills_qty + invoices_qty - adj_in_qty + adj_out_qty
-        start_val = end_val - bills_val + invoices_val - adj_in_val + adj_out_val
+        transfer_qty = sum(t[2] for t in txs_in_period if _is_transfer(t))
+        transfer_val = sum(t[3] for t in txs_in_period if _is_transfer(t))
+        corr_qty = sum(t[2] for t in txs_in_period if _is_corr(t))
+        corr_val = sum(t[3] for t in txs_in_period if _is_corr(t))
+
+        start_qty = end_qty - bills_qty + invoices_qty - transfer_qty - corr_qty
+        start_val = end_val - bills_val + invoices_val - transfer_val - corr_val
 
         days_since = None
         if sku in last_bill_by_sku:
@@ -82,12 +131,14 @@ def build_flat(transactions, sku_to_game, period_start, period_end):
             'start_qty': start_qty,
             'sold_qty': invoices_qty,
             'bought_qty': bills_qty,
-            'net_move_qty': adj_in_qty - adj_out_qty,
+            'transfer_qty': transfer_qty,
+            'corr_qty': corr_qty,
             'end_qty': end_qty,
             'start_val': round(start_val, 2),
             'sold_val': round(invoices_val, 2),
             'bought_val': round(bills_val, 2),
-            'net_move_val': round(adj_in_val - adj_out_val, 2),
+            'transfer_val': round(transfer_val, 2),
+            'corr_val': round(corr_val, 2),
             'end_val': round(end_val, 2),
             'days_since_bill': days_since,
             'has_movement_in_period': has_movement,

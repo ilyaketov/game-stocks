@@ -35,15 +35,15 @@ RED_FILL = PatternFill('solid', start_color='F4B7B7')
 
 HEADERS = [
     "Подразделение", "Игра", "Артикул",
-    "Остаток шт. на начало", "Продано, шт.", "Закуплено, шт.", "Перемещения, шт.", "Остаток шт. на конец",
-    "Остаток $ на начало", "Продано, $", "Закуплено, $", "Перемещения, $", "Остаток $ на конец",
+    "Остаток шт. на начало", "Продано, шт.", "Закуплено, шт.", "Переводы, шт.", "Корректировки, шт.", "Остаток шт. на конец",
+    "Остаток $ на начало", "Продано, $", "Закуплено, $", "Переводы, $", "Корректировки, $", "Остаток $ на конец",
     "Дней с последнего закупа", "Движение",
 ]
-WIDTHS = [22, 50, 12, 13, 12, 13, 13, 13, 14, 13, 14, 13, 14, 14, 11]
-QTY_COLS = (4, 5, 6, 7, 8)        # начало, продано, закуплено, перемещения, конец
-MONEY_COLS = (9, 10, 11, 12, 13)  # ... аналогично в долларах
-DAYS_COL = 14
-MOVEMENT_COL = 15
+WIDTHS = [22, 50, 12, 13, 12, 13, 13, 13, 13, 14, 13, 14, 13, 13, 14, 14, 11]
+QTY_COLS = (4, 5, 6, 7, 8, 9)          # начало, продано, закуплено, переводы, корректировки, конец
+MONEY_COLS = (10, 11, 12, 13, 14, 15)  # ... аналогично в долларах
+DAYS_COL = 16
+MOVEMENT_COL = 17
 SRC_WIDTHS = [42, 42, 14, 22, 18, 30, 10, 10, 14, 12, 14, 22]
 
 MONTHS_RU = {
@@ -190,8 +190,8 @@ def write_report(period_start, period_end, flat, source_bytes, output_path=None)
         movement_text = "есть" if r['has_movement_in_period'] else "нет"
         ws1.append([
             r['store'], r['game'], r['sku'],
-            r['start_qty'], r['sold_qty'], r['bought_qty'], r['net_move_qty'], r['end_qty'],
-            r['start_val'], r['sold_val'], r['bought_val'], r['net_move_val'], r['end_val'],
+            r['start_qty'], r['sold_qty'], r['bought_qty'], r['transfer_qty'], r['corr_qty'], r['end_qty'],
+            r['start_val'], r['sold_val'], r['bought_val'], r['transfer_val'], r['corr_val'], r['end_val'],
             r['days_since_bill'], movement_text,
         ])
 
@@ -300,15 +300,17 @@ def write_report(period_start, period_end, flat, source_bytes, output_path=None)
         ws2.cell(row=row_cursor, column=4, value=r['start_qty'])
         ws2.cell(row=row_cursor, column=5, value=r['sold_qty'])
         ws2.cell(row=row_cursor, column=6, value=r['bought_qty'])
-        ws2.cell(row=row_cursor, column=7, value=r['net_move_qty'])
-        ws2.cell(row=row_cursor, column=8, value=r['end_qty'])
-        ws2.cell(row=row_cursor, column=9, value=r['start_val'])
-        ws2.cell(row=row_cursor, column=10, value=r['sold_val'])
-        ws2.cell(row=row_cursor, column=11, value=r['bought_val'])
-        ws2.cell(row=row_cursor, column=12, value=r['net_move_val'])
-        ws2.cell(row=row_cursor, column=13, value=r['end_val'])
-        ws2.cell(row=row_cursor, column=14, value=r['days_since_bill'])
-        ws2.cell(row=row_cursor, column=15, value=movement_text)
+        ws2.cell(row=row_cursor, column=7, value=r['transfer_qty'])
+        ws2.cell(row=row_cursor, column=8, value=r['corr_qty'])
+        ws2.cell(row=row_cursor, column=9, value=r['end_qty'])
+        ws2.cell(row=row_cursor, column=10, value=r['start_val'])
+        ws2.cell(row=row_cursor, column=11, value=r['sold_val'])
+        ws2.cell(row=row_cursor, column=12, value=r['bought_val'])
+        ws2.cell(row=row_cursor, column=13, value=r['transfer_val'])
+        ws2.cell(row=row_cursor, column=14, value=r['corr_val'])
+        ws2.cell(row=row_cursor, column=15, value=r['end_val'])
+        ws2.cell(row=row_cursor, column=16, value=r['days_since_bill'])
+        ws2.cell(row=row_cursor, column=17, value=movement_text)
         for col_idx in range(1, len(HEADERS) + 1):
             _apply_data_format(ws2, row_cursor, col_idx, font=fnt)
             if fill:
@@ -344,12 +346,12 @@ def write_report(period_start, period_end, flat, source_bytes, output_path=None)
     # ===== Заполняем "Свод" =====
     ws_svod['A1'] = f"Сводная по подразделениям. {month_word.capitalize()} {year}"
     ws_svod['A1'].font = TITLE_FONT
-    ws_svod.merge_cells(start_row=1, start_column=1, end_row=1, end_column=11)
+    ws_svod.merge_cells(start_row=1, start_column=1, end_row=1, end_column=13)
     ws_svod['A2'] = ""
 
     pivot_headers = [
-        "Подразделение", "Остаток шт. на начало", "Продано, шт.", "Закуплено, шт.", "Перемещения, шт.", "Остаток шт. на конец",
-        "Остаток $ на начало", "Продано, $", "Закуплено, $", "Перемещения, $", "Остаток $ на конец",
+        "Подразделение", "Остаток шт. на начало", "Продано, шт.", "Закуплено, шт.", "Переводы, шт.", "Корректировки, шт.", "Остаток шт. на конец",
+        "Остаток $ на начало", "Продано, $", "Закуплено, $", "Переводы, $", "Корректировки, $", "Остаток $ на конец",
     ]
     phr = 3
     for col_idx, h in enumerate(pivot_headers, 1):
@@ -370,8 +372,8 @@ def write_report(period_start, period_end, flat, source_bytes, output_path=None)
     # Свод показывает: start_qty, sold_qty, bought_qty, net_move_qty, end_qty,
     #                  start_val, sold_val, bought_val, net_move_val, end_val
     # чтобы тождество нач − продано + закуплено + перемещения = конец закрывалось.
-    src_cols_map = {2: 'D', 3: 'E', 4: 'F', 5: 'G', 6: 'H', 7: 'I', 8: 'J', 9: 'K', 10: 'L', 11: 'M'}
-    qty_cols = (2, 3, 4, 5, 6)
+    src_cols_map = {2: 'D', 3: 'E', 4: 'F', 5: 'G', 6: 'H', 7: 'I', 8: 'J', 9: 'K', 10: 'L', 11: 'M', 12: 'N', 13: 'O'}
+    qty_cols = (2, 3, 4, 5, 6, 7)
     start_data = phr + 1
     for i, store in enumerate(stores):
         r = start_data + i
@@ -393,11 +395,11 @@ def write_report(period_start, period_end, flat, source_bytes, output_path=None)
 
     total_row = start_data + len(stores)
     ws_svod.cell(row=total_row, column=1, value="ИТОГО")
-    for col_idx in range(2, 12):
+    for col_idx in range(2, 14):
         col_letter = get_column_letter(col_idx)
         ws_svod.cell(row=total_row, column=col_idx,
                      value=f"=SUM({col_letter}{start_data}:{col_letter}{total_row - 1})")
-    for col_idx in range(1, 12):
+    for col_idx in range(1, 14):
         c = ws_svod.cell(row=total_row, column=col_idx)
         c.fill = GRAND_FILL
         c.font = GRAND_FONT
@@ -405,10 +407,10 @@ def write_report(period_start, period_end, flat, source_bytes, output_path=None)
         c.alignment = Alignment(horizontal='center' if col_idx == 1 else 'right', vertical='center')
         if col_idx in qty_cols:
             c.number_format = '#,##0;(#,##0);-'
-        elif col_idx >= 7:
+        elif col_idx >= 8:
             c.number_format = '$#,##0.00;($#,##0.00);-'
 
-    pivot_widths = [24, 15, 13, 14, 15, 15, 17, 14, 15, 15, 17]
+    pivot_widths = [24, 15, 13, 14, 15, 16, 15, 17, 14, 15, 16, 15, 17]
     for i, w in enumerate(pivot_widths, 1):
         ws_svod.column_dimensions[get_column_letter(i)].width = w
     ws_svod.freeze_panes = f'B{phr + 1}'
@@ -416,10 +418,11 @@ def write_report(period_start, period_end, flat, source_bytes, output_path=None)
     # ===== Лист 5: Риски =====
     ws3 = wb.create_sheet("Риски")
     T = "Таблица"
-    # Новые колонки (15): G=net_move_qty, H=end_qty, L=net_move_val, M=end_val, N=days, O=movement
-    T_DAYS = f"{T}!$N${T1_FIRST}:$N${T1_LAST}"
-    T_END_QTY = f"{T}!$H${T1_FIRST}:$H${T1_LAST}"
-    T_END_VAL = f"{T}!$M${T1_FIRST}:$M${T1_LAST}"
+    # Колонки Таблицы (17): G=переводы_шт, H=корр_шт, I=end_qty, M=переводы_$, N=корр_$,
+    #                       O=end_val, P=days, Q=movement
+    T_DAYS = f"{T}!$P${T1_FIRST}:$P${T1_LAST}"
+    T_END_QTY = f"{T}!$I${T1_FIRST}:$I${T1_LAST}"
+    T_END_VAL = f"{T}!$O${T1_FIRST}:$O${T1_LAST}"
     T_STORE = f"{T}!$A${T1_FIRST}:$A${T1_LAST}"
 
     # Склады-накопители (магазины без единой закупки за всю историю) исключаются

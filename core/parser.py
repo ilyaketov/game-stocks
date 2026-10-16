@@ -72,8 +72,9 @@ def parse_inventory_report(path_or_file):
             cost = i or 0
             on_hand = j or 0
             asset = k or 0
+            num = str(e) if e is not None else ''  # номер документа (для классификации перевод/корректировка)
 
-            transactions[(current_sku, store)].append((dt, d, qty, cost, on_hand, asset))
+            transactions[(current_sku, store)].append((dt, d, qty, cost, on_hand, asset, num))
 
     # Стабильная сортировка по дате (порядок строк сохраняется при равных датах)
     for key in transactions:
